@@ -70,8 +70,6 @@ const state = reactive({
   search: "",
   teamSearch: "",
   hideDrafted: false,
-  sortKey: "rank",
-  sortDir: 1,
   selectedTeam: "",
   selectedPlayerKey: "",
   statusKind: "",
@@ -306,33 +304,19 @@ const visibleTeams = computed(() =>
   }),
 );
 const visibleRankings = computed(() =>
-  state.rankings
-    .filter(
-      (row) =>
-        (state.posFilter === "ALL" || row.pos === state.posFilter) &&
-        (!state.search ||
-          row.name.toLowerCase().includes(state.search.toLowerCase())),
-    )
-    .filter(
-      (row) =>
-        !state.hideDrafted ||
-        statusFor(row.sleeperId || nameIndex.value[row.normName]) !== "gone" ||
-        selectedKey(
-          row.sleeperId || nameIndex.value[row.normName],
-          row.normName,
-        ) === state.selectedPlayerKey,
-    )
-    .sort((a, b) => {
-      const av =
-        state.sortKey === "rank"
-          ? a.rank
-          : String(a[state.sortKey as keyof Ranking] || "").toLowerCase();
-      const bv =
-        state.sortKey === "rank"
-          ? b.rank
-          : String(b[state.sortKey as keyof Ranking] || "").toLowerCase();
-      return (av < bv ? -1 : av > bv ? 1 : 0) * state.sortDir;
-    }),
+  state.rankings.filter(
+    (row) =>
+      (state.posFilter === "ALL" || row.pos === state.posFilter) &&
+      (!state.search || row.name.toLowerCase().includes(state.search.toLowerCase())),
+  ).filter(
+    (row) =>
+      !state.hideDrafted ||
+      statusFor(row.sleeperId || nameIndex.value[row.normName]) !== "gone" ||
+      selectedKey(
+        row.sleeperId || nameIndex.value[row.normName],
+        row.normName,
+      ) === state.selectedPlayerKey,
+  ),
 );
 const statusFor = (id?: string) =>
   id && state.mine.has(id)
@@ -429,10 +413,7 @@ const resetDrafted = () => {
   state.mine = new Set();
   setStatus("", "drafted list reset");
 };
-const sortBy = (key: string) => {
-  state.sortDir = state.sortKey === key ? state.sortDir * -1 : 1;
-  state.sortKey = key;
-};
+
 const connect = async () => {
   save("settings", {
     leagueId: state.leagueId || "1386222812854767616",
@@ -716,24 +697,9 @@ onBeforeUnmount(() => {
           <table class="rank-table">
             <thead>
               <tr>
-                <th
-                  :class="{ sorted: state.sortKey === 'rank' }"
-                  @click="sortBy('rank')"
-                >
-                  RK
-                </th>
-                <th
-                  :class="{ sorted: state.sortKey === 'name' }"
-                  @click="sortBy('name')"
-                >
-                  PLAYER
-                </th>
-                <th
-                  :class="{ sorted: state.sortKey === 'pos' }"
-                  @click="sortBy('pos')"
-                >
-                  POS
-                </th>
+                <th>RK</th>
+                <th>PLAYER</th>
+                <th>POS</th>
                 <th>BYE</th>
                 <th>TEAM</th>
               </tr>
