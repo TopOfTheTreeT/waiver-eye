@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive } from "vue";
-import { Eye, EyeOff } from "lucide-vue-next";
+import { Eye } from "lucide-vue-next";
 import Papa from "papaparse";
 
 type Ranking = {
