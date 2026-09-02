@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, watch } from "vue";
 import { Eye } from "lucide-vue-next";
 import Papa from "papaparse";
 
@@ -324,7 +324,20 @@ const statusFor = (id?: string) =>
     : id && state.drafted.has(id)
       ? "gone"
       : "avail";
-const selectedKey = (id: string | undefined, name: string) => id || `n:${name}`;
+const selectedKey = (id: string | undefined, name: string) => {
+  if (id) return id;
+  const normalized = normName(name);
+  return `n:${normalized || name}`;
+};
+const syncSelectedPlayerKey = () => {
+  if (!state.selectedPlayerKey) return;
+  if (!state.selectedPlayerKey.startsWith("n:")) return;
+  const normalizedName = state.selectedPlayerKey.replace(/^n:/, "");
+  const resolvedId = nameIndex.value[normalizedName] || nameIndex.value[normName(normalizedName)];
+  if (resolvedId) {
+    state.selectedPlayerKey = selectedKey(resolvedId, normalizedName);
+  }
+};
 const isTeamSelected = (team: string) => state.selectedTeam === team;
 const selectTeam = (team: string) => {
   state.selectedTeam = state.selectedTeam === team ? "" : team;
@@ -409,11 +422,25 @@ const choosePlayer = (id: string | undefined, name: string) => {
   state.selectedTeam = "";
 };
 const resetDrafted = () => {
+  stopPolling();
   state.drafted = new Set();
   state.mine = new Set();
   setStatus("", "drafted list reset");
 };
 
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = undefined;
+  }
+};
+const startPolling = () => {
+  if (!state.leagueId && !state.draftId) return;
+  stopPolling();
+  pollTimer = setInterval(() => {
+    void pollDraft();
+  }, 1000);
+};
 const connect = async () => {
   save("settings", {
     leagueId: state.leagueId || "1386222812854767616",
@@ -427,7 +454,7 @@ const connect = async () => {
     setStatus("", "connecting...");
     await fetchPlayers();
     await pollDraft();
-    // pollTimer = setInterval(pollDraft, 5000);
+    startPolling();
   } catch (error) {
     setStatus("err", error instanceof Error ? error.message : "sync error");
   }
@@ -463,6 +490,7 @@ const fetchPlayers = async () => {
       };
   });
   Object.assign(state.players, players);
+  syncSelectedPlayerKey();
   save("players-cache", { fetchedAt: Date.now(), players });
 };
 const pollDraft = async () => {
@@ -492,6 +520,7 @@ const pollDraft = async () => {
     state.drafted.add(playerId);
     if ((state.myUserId && pick.picked_by === state.myUserId) || (state.myRosterId && pick.roster_id === state.myRosterId)) state.mine.add(playerId);
   });
+  syncSelectedPlayerKey();
   setStatus(
     "live",
     `synced · ${picks.length} picks made · ${new Date().toLocaleTimeString()}`,
@@ -526,6 +555,19 @@ const fileLoaded = async (event: Event, type: keyof typeof csv) => {
   const file = (event.target as HTMLInputElement).files?.[0];
   if (file) csv[type] = await file.text();
 };
+watch(
+  () => [state.leagueId, state.draftId, state.username],
+  ([leagueId, draftId]) => {
+    if (!leagueId && !draftId) {
+      stopPolling();
+      return;
+    }
+    if (state.username || leagueId || draftId) {
+      void connect();
+    }
+  },
+  { immediate: true },
+);
 onMounted(() => {
   const settings = load("settings", {
     leagueId: "",
@@ -537,10 +579,9 @@ onMounted(() => {
     csv[type] = load(`${type}-csv`, "") as string;
     if (csv[type]) handleSave(type);
   });
-  if (state.leagueId || state.draftId) connect();
 });
 onBeforeUnmount(() => {
-  if (pollTimer) clearInterval(pollTimer);
+  stopPolling();
 });
 </script>
 
@@ -552,22 +593,29 @@ onBeforeUnmount(() => {
             <strong>DRAFT<span>WIZARD</span></strong>
           </div>
           <div class="sync-field">
-            <i class="status-dot" :class="state.statusKind"></i
-            ><span class="status-text">{{ state.statusText }}</span>
+            <i class="status-dot" :class="state.statusKind"></i>
+            <span class="status-text">{{ state.statusText }}</span>
+            <span
+              class="live-indicator"
+              :class="{ active: state.statusKind === 'live' }"
+              :title="state.statusKind === 'live' ? 'Automatic draft polling is active' : 'Draft polling is idle'"
+            >
+              {{ state.statusKind === "live" ? "LIVE" : "IDLE" }}
+            </span>
           </div>
-          
+
           <div class="settings-actions">
             <button class="btn ghost" @click="resetDrafted">Reset</button>
             <button class="btn" @click="connect">Connect</button>
           </div>
-            <button
-              class="settings-button"
-              aria-label="Open settings"
-              title="Open settings"
-              @click="state.settingsOpen = true"
-            >
-              ⚙
-            </button>
+          <button
+            class="settings-button"
+            aria-label="Open settings"
+            title="Open settings"
+            @click="state.settingsOpen = true"
+          >
+            ⚙
+          </button>
           </div>
       </header>
     <main class="layout">
