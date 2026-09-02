@@ -389,9 +389,36 @@ const handleSave = (type: keyof typeof csv) => {
       error instanceof Error ? error.message : "could not parse CSV";
   }
 };
-const loadSample = () => {
-  Object.assign(csv, sample);
-  (Object.keys(csv) as (keyof typeof csv)[]).forEach(handleSave);
+const loadSample = async () => {
+  try {
+    setStatus("", "loading sample data...");
+    const [rankingsRes, depthRes] = await Promise.all([
+      fetch("/sample-rankings.csv"),
+      fetch("/sample-depth.csv"),
+    ]);
+
+    if (!rankingsRes.ok || !depthRes.ok) {
+      throw new Error("failed to load sample files");
+    }
+
+    const rankingsText = await rankingsRes.text();
+    const depthText = await depthRes.text();
+
+    Object.assign(csv, {
+      rankings: rankingsText,
+      depth: depthText,
+      power: sample.power,
+      defense: sample.defense,
+    });
+
+    (Object.keys(csv) as (keyof typeof csv)[]).forEach(handleSave);
+    setStatus("", "sample data loaded");
+  } catch (error) {
+    setStatus(
+      "err",
+      error instanceof Error ? error.message : "failed to load sample data"
+    );
+  }
 };
 const choosePlayer = (id: string | undefined, name: string) => {
   state.selectedPlayerKey = selectedKey(id, name);
@@ -682,7 +709,7 @@ onBeforeUnmount(() => {
               class="hide-drafted"
               :class="{ active: state.hideDrafted }"
               @click="state.hideDrafted = !state.hideDrafted"
-              >"state.hideDrafted" ? <EyeOff/> : <Eye /></button>
+              ><Eye /></button>
           </div>
         </div>
         <div class="side-list-scroll">
