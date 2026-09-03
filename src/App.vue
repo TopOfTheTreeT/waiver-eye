@@ -2,21 +2,15 @@
 import { computed, onBeforeUnmount, onMounted, reactive, watch } from "vue";
 import { Eye } from "lucide-vue-next";
 import Papa from "papaparse";
-
-type Ranking = {
-  rank: number;
-  name: string;
-  pos: string;
-  posRank: number;
-  posRankStr: string;
-  team: string;
-  bye: string;
-  tier: string;
-  normName: string;
-  sleeperId?: string;
-};
-type DepthEntry = { order: number; name: string; normName: string };
-type Player = { name: string; team: string; pos: string };
+import {
+  hardcodedDefense,
+  hardcodedDepthCharts,
+  hardcodedPower,
+  hardcodedRankings,
+  type DepthEntry,
+  type Player,
+  type Ranking,
+} from "./data";
 
 const teams = [
   "ARI",
@@ -76,10 +70,10 @@ const state = reactive({
   statusText: "not connected",
   modalOpen: false,
   settingsOpen: false,
-  rankings: [] as Ranking[],
-  depthCharts: {} as Record<string, Record<string, DepthEntry[]>>,
-  power: {} as Record<string, number>,
-  defense: {} as Record<string, number>,
+  rankings: hardcodedRankings as Ranking[],
+  depthCharts: hardcodedDepthCharts as Record<string, Record<string, DepthEntry[]>>,
+  power: hardcodedPower as Record<string, number>,
+  defense: hardcodedDefense as Record<string, number>,
   players: {} as Record<string, Player>,
   drafted: new Set<string>(),
   mine: new Set<string>(),
@@ -135,6 +129,7 @@ const parseRankings = (text: string): Ranking[] => {
         : "";
       const positionMatch = position.match(/^([A-Z]+)(\d+)?$/);
       return {
+        id: `rank-${index + 1}-${normName(name)}`,
         rank: rankCol ? Number.parseInt(row[rankCol]) || index + 1 : index + 1,
         name,
         pos: positionMatch?.[1] || position,
@@ -316,7 +311,7 @@ const visibleRankings = computed(() =>
         row.sleeperId || nameIndex.value[row.normName],
         row.normName,
       ) === state.selectedPlayerKey,
-  ),
+  ).sort((a, b) => a.rank - b.rank),
 );
 const statusFor = (id?: string) =>
   id && state.mine.has(id)
@@ -575,10 +570,6 @@ onMounted(() => {
     username: "",
   });
   Object.assign(state, settings);
-  (["rankings", "depth", "power", "defense"] as const).forEach((type) => {
-    csv[type] = load(`${type}-csv`, "") as string;
-    if (csv[type]) handleSave(type);
-  });
 });
 onBeforeUnmount(() => {
   stopPolling();
@@ -755,7 +746,7 @@ onBeforeUnmount(() => {
             <tbody>
               <tr
                 v-for="row in visibleRankings"
-                :key="row.normName"
+                :key="row.id"
                 :class="{
                   'tier-break': hasTierBreak(visibleRankings.indexOf(row)),
                   'selected-row':
